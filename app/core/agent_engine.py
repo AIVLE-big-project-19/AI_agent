@@ -29,12 +29,13 @@ except ImportError:
 
 
 AGENT_VERSION = "solar-policy-agent-json-v2"
-TOP_K = 3
+TOP_K = 1
 
 USE_LLM = False
 OPENAI_MODEL = "gpt-5-mini"
 LLM_FAILURE_MODE = "FALLBACK"
 POLICY_JSON_NAME = "태양광_정책통합_2026.json"
+INCLUDE_POLICY_DETAILS = False
 
 policy_df = pd.DataFrame()
 relation_df = pd.DataFrame()
@@ -525,6 +526,7 @@ def configure_runtime(
     openai_max_retries: int,
     llm_failure_mode: str,
     policy_json_name: str,
+    include_policy_details: bool,
 ) -> dict[str, Any]:
     global policy_df
     global relation_df
@@ -533,6 +535,7 @@ def configure_runtime(
     global OPENAI_MODEL
     global LLM_FAILURE_MODE
     global POLICY_JSON_NAME
+    global INCLUDE_POLICY_DETAILS
     global BASE_LLM
     global EXPLANATION_LLM
     global _runtime_status
@@ -541,6 +544,7 @@ def configure_runtime(
     relation_df = relations.copy()
     funding_df = funding_conditions.copy()
     POLICY_JSON_NAME = policy_json_name
+    INCLUDE_POLICY_DETAILS = bool(include_policy_details)
 
     OPENAI_MODEL = openai_model
     LLM_FAILURE_MODE = llm_failure_mode.upper()
@@ -1227,41 +1231,241 @@ def merge_result_node(state: AgentState) -> dict[str, Any]:
     selection = state["program_selection"]
     explanation = state["final_explanation"]
 
-    programs = copy.deepcopy(selection["programs"])
-    for program in programs:
+    def select_primary_funding_condition(
+        program: dict[str, Any],
+    ) -> dict[str, Any]:
+        conditions = program.get("funding_conditions", [])
+        if not isinstance(conditions, list):
+            return {}
+
+        for condition in conditions:
+            if "공공기관" in clean_text(
+                condition.get("applicant_type")
+            ):
+                return condition
+
+        return conditions[0] if conditions else {}
+
+    def compact_support_type(value: Any) -> str:
+        text = clean_text(value)
+        if "융자" in text:
+            return "융자"
+        if "보조" in text:
+            return "보조"
+        if "대부" in text or "임대료" in text:
+            return "대부·사용허가"
+        return text
+
+    def first_sentence(value: Any) -> str:
+        text = clean_text(value)
+        if not text:
+            return ""
+        sentence = text.split(".", 1)[0].strip()
+        return sentence + "." if sentence else ""
+
+    def build_required_checks(
+        program: dict[str, Any],
+        funding: dict[str, Any],
+    ) -> list[str]:
+        checks = [
+            clean_text(item)
+            for item in program.get(
+                "missing_requirements",
+                [],
+            )
+            if clean_text(item)
+        ]
+
+        evidence = " ".join([
+            clean_text(
+                program.get("application_conditions")
+            ),
+            clean_text(
+                program.get("matched_policy_condition")
+            ),
+            clean_text(
+                funding.get("funding_caution")
+            ),
+        ])
+
+        if "사업주체" in evidence:
+            checks.append("사업주체 확인")
+        if any(
+            keyword in evidence
+            for keyword in (
+                "부지 권원",
+                "부지권원",
+                "사용권",
+            )
+        ):
+            checks.append("부지 사용권 확인")
+        if any(
+            keyword in evidence
+            for keyword in (
+                "금융기관",
+                "담보",
+                "대출 심사",
+            )
+        ):
+            checks.append("금융기관 심사")
+
+        if (
+            clean_text(program.get("status_2026"))
+            != "OPEN"
+        ):
+            checks.append("현재 신청 가능 여부 확인")
+
+        return list(dict.fromkeys(checks))
+
+    compact_programs: list[dict[str, Any]] = []
+
+    for program in selection["programs"][:1]:
         program_id = program["program_id"]
-        ai_reason = explanation["program_reasons"].get(
+        ai_reason = explanation[
+            "program_reasons"
+        ].get(
             program_id,
             program.get("reason", ""),
         )
-        program["ai_reason"] = ai_reason
-        program["why_needed"] = ai_reason
+
+        route_reason = clean_text(route.get("reason"))
+        concise_reason = clean_text(ai_reason)
+        if (
+            route_reason
+            and concise_reason.startswith(route_reason)
+        ):
+            concise_reason = concise_reason[
+                len(route_reason):
+            ].strip()
+        concise_reason = first_sentence(concise_reason)
+
+        funding = select_primary_funding_condition(
+            program
+        )
+        applicant_type = clean_text(
+            funding.get("applicant_type")
+        )
+        support_ratio = clean_text(
+            funding.get("support_ratio_text")
+        )
+
+        if applicant_type and support_ratio:
+            support_summary = (
+                f"{applicant_type} 기준 "
+                f"{support_ratio}"
+            )
+        else:
+            support_summary = clean_text(
+                program.get("support_rate")
+            )
+
+        support_type = compact_support_type(
+            first_not_missing(
+                funding.get("funding_type_label"),
+                program.get("support_method"),
+            )
+        )
+        repayment_summary = clean_text(
+            funding.get("repayment_terms_text")
+        )
+        application_period = clean_text(
+            program.get("application_status_text")
+        )
+        required_checks = build_required_checks(
+            program,
+            funding,
+        )
+
+        source_urls = program.get("source_urls", [])
+        source_url = (
+            clean_text(source_urls[0])
+            if isinstance(source_urls, list)
+            and source_urls
+            else ""
+        )
+
+        summary_parts = [
+            (
+                f"{program['program_name']}을 "
+                "1순위로 추천합니다."
+            )
+        ]
+        if concise_reason:
+            summary_parts.append(concise_reason)
+        if support_type:
+            summary_parts.append(
+                f"지원 유형은 {support_type}입니다."
+            )
+        if support_summary:
+            summary_parts.append(
+                f"지원 조건은 {support_summary}입니다."
+            )
+        if repayment_summary:
+            summary_parts.append(
+                f"상환 조건은 {repayment_summary}입니다."
+            )
+        if application_period:
+            summary_parts.append(
+                f"신청 기간은 {application_period}입니다."
+            )
+        if required_checks:
+            summary_parts.append(
+                "신청 전 다음 사항을 확인해야 합니다: "
+                + ", ".join(required_checks)
+                + "."
+            )
+
+        policy_summary = " ".join(summary_parts)
+
+        compact_program = {
+            "program_id": program_id,
+            "program_name": program["program_name"],
+            "priority": program["priority"],
+            "status": program["status_2026"],
+            "summary": policy_summary,
+            "source_url": source_url,
+        }
+
+        if INCLUDE_POLICY_DETAILS:
+            compact_program.update({
+                "match_status": program["match_status"],
+                "support_type": support_type,
+                "support_summary": support_summary,
+                "repayment_summary": repayment_summary,
+                "application_period": application_period,
+                "reason": concise_reason,
+                "required_checks": required_checks,
+            })
+
+        compact_programs.append(compact_program)
 
     risk_support["regulatory_assessment"] = assessment
     risk_support["business_route"] = route
-    risk_support["recommended_subsidies"] = programs
-    risk_support["support_program_relations"] = selection["relations"]
+    risk_support["recommended_subsidies"] = (
+        compact_programs
+    )
+    risk_support.pop(
+        "support_program_relations",
+        None,
+    )
     risk_support["agent_explanation"] = {
-        "summary": explanation["summary"],
-        "regulation_reason": explanation["regulation_reason"],
-        "business_route_reason": explanation["business_route_reason"],
-        "top_program": explanation.get("top_program", {}),
-        "required_checks": explanation["required_checks"],
         "caution": explanation["caution"],
-        "program_selection_block_reason": selection[
-            "selection_block_reason"
-        ],
-        "method": explanation["method"],
     }
     risk_support["audit"] = {
         "agent_version": AGENT_VERSION,
-        "processed_at_utc": datetime.now(timezone.utc).isoformat(),
+        "processed_at_utc": datetime.now(
+            timezone.utc
+        ).isoformat(),
         "pipeline_score_preserved": True,
         "regulation_source": "RANKING_PIPELINE",
         "agent_regulatory_reassessment": False,
         "llm_enabled": USE_LLM,
-        "llm_model": OPENAI_MODEL if USE_LLM else None,
-        "explanation_method": explanation["method"],
+        "llm_model": (
+            OPENAI_MODEL if USE_LLM else None
+        ),
+        "explanation_method": explanation[
+            "method"
+        ],
         "errors": state.get("errors", []),
         "source_files": [POLICY_JSON_NAME],
     }

@@ -47,6 +47,9 @@ class AgentService:
                 ),
                 llm_failure_mode=self.settings.llm_failure_mode,
                 policy_json_name=self.settings.policy_json_name,
+                include_policy_details=(
+                    self.settings.include_policy_details
+                ),
             )
             self._data_counts = bundle.counts()
             self._last_reload_epoch = time.time()

@@ -48,16 +48,16 @@ def rebuild_payload(
     output[wrapper] = results
 
     if isinstance(output.get("summary"), dict):
-        output["summary"]["municipal_agent_processed"] = len(
+        output["summary"]["policy_agent_processed"] = len(
             results
         )
-        output["summary"]["municipal_agent_version"] = (
+        output["summary"]["policy_agent_version"] = (
             agent_version
         )
-        output["summary"]["municipal_agent_llm_enabled"] = (
+        output["summary"]["policy_agent_llm_enabled"] = (
             llm_enabled
         )
-        output["summary"]["municipal_agent_llm_model"] = (
+        output["summary"]["policy_agent_llm_model"] = (
             llm_model
         )
 

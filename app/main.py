@@ -121,14 +121,15 @@ def health(
         Depends(require_internal_api_key)
     ],
 )
-def analyze_candidate(
-    payload: dict[str, Any] = Body(...),
+def analyze(
+    payload: Any = Body(...),
     service: AgentService = Depends(get_service),
 ) -> dict[str, Any]:
-    result = service.analyze_candidate(payload)
+    analyzed = service.analyze_batch(payload)
+
     return {
         "success": True,
-        "result": result,
+        **analyzed,
         "meta": service.health()["runtime"],
     }
 

@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     max_batch_size: int = 100
     internal_api_key: str = ""
 
+    include_policy_details: bool = False
+
     data_dir: Path = Field(default_factory=_resolve_default_data_dir)
     policy_json_name: str = POLICY_JSON_NAME
 
