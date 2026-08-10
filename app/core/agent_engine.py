@@ -299,15 +299,15 @@ def infer_setback_violation(
 
 
 def normalize_candidate(ranking_result: dict[str, Any]) -> dict[str, Any]:
-    site = ranking_result.get("1_site_info", {})
-    scores = ranking_result.get("2_scores_and_evaluation", {})
-    vision_block = ranking_result.get("3_vision_ai_and_simulation", {})
-    vision = vision_block.get("vision_analysis", {})
-    simulation = vision_block.get("simulation", {})
-    risk = ranking_result.get("4_risk_and_support", {})
-    risk_check = risk.get("rule_based_risk_check", {})
-    regulatory_input = risk.get("regulatory_input", {})
-    upstream_assessment = risk.get("regulatory_assessment", {})
+    site = ranking_result.get("1_site_info") or {}
+    scores = ranking_result.get("2_scores_and_evaluation") or {}
+    vision_block = ranking_result.get("3_vision_ai_and_simulation") or {}
+    vision = vision_block.get("vision_analysis") or {}
+    simulation = vision_block.get("simulation") or {}
+    risk = ranking_result.get("4_risk_and_support") or {}
+    risk_check = risk.get("rule_based_risk_check") or {}
+    regulatory_input = risk.get("regulatory_input") or {}
+    upstream_assessment = risk.get("regulatory_assessment") or {}
 
     address = clean_text(site.get("address"))
     province, jurisdiction = infer_region_and_jurisdiction(address)
@@ -327,8 +327,8 @@ def normalize_candidate(ranking_result: dict[str, Any]) -> dict[str, Any]:
         candidate_type = "land"
 
     asset_type, installation_type = candidate_type_settings(candidate_type)
-    distance_risk = risk_check.get("distance_risk", {})
-    suitability = scores.get("suitability", {})
+    distance_risk = risk_check.get("distance_risk") or {}
+    suitability = scores.get("suitability") or {}
 
     upstream_decision_raw = first_not_missing(
         suitability.get("rule_decision"),
