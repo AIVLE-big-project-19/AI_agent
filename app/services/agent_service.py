@@ -31,6 +31,7 @@ class AgentService:
     def reload_data(self) -> dict[str, Any]:
         bundle = self.repository.load()
 
+        # 재적재 중 요청이 실행되어 정책 데이터가 섞이지 않도록 잠근다.
         with self._lock:
             runtime = agent_engine.configure_runtime(
                 policies=bundle.policy_df,
@@ -80,6 +81,7 @@ class AgentService:
     ) -> dict[str, Any]:
         validate_candidate(candidate)
 
+        # LangGraph와 순차 실행기는 동일한 invoke 인터페이스를 사용한다.
         with self._lock:
             state = agent_engine.agent_graph.invoke({
                 "ranking_result": copy.deepcopy(candidate),
@@ -106,6 +108,7 @@ class AgentService:
         results: list[dict[str, Any]] = []
         summary_rows: list[dict[str, Any]] = []
 
+        # 입력 순서와 결과 순서를 유지하도록 후보지를 순차 처리한다.
         with self._lock:
             for input_order, candidate in enumerate(
                 candidates,
@@ -151,6 +154,7 @@ class AgentService:
                 })
 
         runtime = agent_engine.get_runtime_status()
+        # 추천 결과를 원래 입력 JSON 구조에 다시 넣는다.
         rebuilt = rebuild_payload(
             payload,
             results,
