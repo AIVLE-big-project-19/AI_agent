@@ -15,7 +15,7 @@ POLICY_JSON_NAME = "태양광_정책통합_2026.json"
 
 
 def _resolve_default_data_dir() -> Path:
-    """통합 정책 JSON이 들어 있는 data 폴더를 찾습니다."""
+    # 실행 위치가 달라도 통합 정책 JSON이 있는 data 폴더를 찾는다.
     candidates = [
         PROJECT_DIR / "data",
         PROJECT_DIR / PROJECT_DIR.name / "data",
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     log_level: str = "info"
 
     use_llm: bool = True
-    # 실제 키는 반드시 .env의 OPENAI_API_KEY로만 주입합니다.
+    # 실제 키는 코드에 저장하지 않고 .env로만 주입한다.
     openai_api_key: str = ""
     openai_model: str = "gpt-5-mini"
     openai_timeout_seconds: int = 90
