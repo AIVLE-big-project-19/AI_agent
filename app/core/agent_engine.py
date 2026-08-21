@@ -28,6 +28,7 @@ except ImportError:
     LANGGRAPH_AVAILABLE = False
 
 
+# LangGraph가 없어도 동일한 순서의 순차 실행기로 동작한다.
 AGENT_VERSION = "solar-policy-agent-json-v2"
 TOP_K = 1
 
@@ -299,6 +300,7 @@ def infer_setback_violation(
 
 
 def normalize_candidate(ranking_result: dict[str, Any]) -> dict[str, Any]:
+    # 입력 JSON에서 정책 추천에 필요한 후보지 정보만 정규화한다.
     site = ranking_result.get("1_site_info") or {}
     scores = ranking_result.get("2_scores_and_evaluation") or {}
     vision_block = ranking_result.get("3_vision_ai_and_simulation") or {}
@@ -447,6 +449,7 @@ def normalize_candidate(ranking_result: dict[str, Any]) -> dict[str, Any]:
 def build_pipeline_regulatory_assessment(
     facts: dict[str, Any],
 ) -> dict[str, Any]:
+    # 전달받은 규제 판정은 변경하지 않고 추천 조건으로 사용한다.
     decision = facts["pipeline_rule_decision"]
     raw_decision = facts["pipeline_rule_decision_raw"]
     message = facts["pipeline_rule_message"]
@@ -552,6 +555,7 @@ def configure_runtime(
     requested = bool(use_llm)
     key = str(openai_api_key or "").strip()
 
+    # LLM을 사용할 수 없어도 조건 판단과 지원사업 추천은 계속 수행한다.
     if not requested:
         USE_LLM = False
         llm_reason = "DISABLED_BY_CONFIG"
@@ -636,6 +640,7 @@ def select_business_route(
     facts: dict[str, Any],
     assessment: dict[str, Any],
 ) -> dict[str, Any]:
+    # 후보지 유형과 확인된 조건을 기준으로 적용할 사업경로를 선택한다.
     decision = assessment["final_decision"]
     exception_codes = assessment["exception_codes"]
 
@@ -888,6 +893,7 @@ def select_support_programs(
     route: dict[str, Any],
     top_k: int = TOP_K,
 ) -> dict[str, Any]:
+    # 경로·지역·자격·용량 조건을 통과한 사업만 정의된 순서로 추천한다.
     if route["status"] not in {"SELECTED", "CONDITIONAL_SELECTED"}:
         return {
             "programs": [],
@@ -1011,6 +1017,7 @@ def select_support_programs(
 
 
 class AgentState(TypedDict, total=False):
+    # 각 처리 단계가 공유하는 입력과 중간 결과다.
     ranking_result: dict[str, Any]
     facts: dict[str, Any]
     regulatory_assessment: dict[str, Any]
@@ -1132,6 +1139,7 @@ def deterministic_final_explanation(
 
 
 def generate_llm_explanation_node(state: AgentState) -> dict[str, Any]:
+    # LLM은 확정된 추천 결과를 바꾸지 않고 설명문만 생성한다.
     fallback = deterministic_final_explanation(
         state,
         method="DETERMINISTIC_FALLBACK",
@@ -1187,6 +1195,7 @@ def generate_llm_explanation_node(state: AgentState) -> dict[str, Any]:
         parsed = EXPLANATION_LLM.invoke(prompt)
         result = parsed.model_dump()
 
+        # 허용된 지원사업 외의 LLM 출력은 결과에서 제외한다.
         program_reason_map = {
             item["program_id"]: item["reason"]
             for item in result.get("program_reasons", [])
@@ -1223,6 +1232,7 @@ def generate_llm_explanation_node(state: AgentState) -> dict[str, Any]:
 
 
 def merge_result_node(state: AgentState) -> dict[str, Any]:
+    # 원본 입력을 보존하고 추천 결과만 4_risk_and_support에 추가한다.
     result = copy.deepcopy(state["ranking_result"])
     risk_support = result.setdefault("4_risk_and_support", {})
 
@@ -1451,6 +1461,7 @@ def merge_result_node(state: AgentState) -> dict[str, Any]:
     risk_support["agent_explanation"] = {
         "caution": explanation["caution"],
     }
+    # 사용한 데이터와 설명 생성 방식을 확인하기 위한 감사 정보다.
     risk_support["audit"] = {
         "agent_version": AGENT_VERSION,
         "processed_at_utc": datetime.now(
@@ -1474,6 +1485,7 @@ def merge_result_node(state: AgentState) -> dict[str, Any]:
 
 
 class SequentialAgentGraph:
+    # LangGraph 미설치 환경에서도 여섯 단계를 같은 순서로 실행한다.
     def invoke(self, initial_state: dict[str, Any]) -> AgentState:
         state: AgentState = dict(initial_state)
 
@@ -1512,6 +1524,7 @@ def build_agent_graph():
     )
     builder.add_node("merge_result", merge_result_node)
 
+    # 그래프는 조건을 판단하지 않고 실행 순서와 상태 전달만 관리한다.
     builder.add_edge(START, "extract_facts")
     builder.add_edge("extract_facts", "resolve_pipeline_regulation")
     builder.add_edge(
