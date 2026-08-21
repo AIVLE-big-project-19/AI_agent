@@ -11,6 +11,7 @@ import pandas as pd
 def extract_candidate_list(
     payload: Any,
 ) -> tuple[list[dict[str, Any]], str | None]:
+    # 단일 객체와 여러 래퍼 형식을 동일한 후보지 배열로 처리한다.
     if isinstance(payload, list):
         return payload, None
 
@@ -38,6 +39,7 @@ def rebuild_payload(
     llm_enabled: bool,
     llm_model: str | None,
 ) -> Any:
+    # 분석 후에도 입력 JSON의 원래 구조를 유지한다.
     if wrapper is None:
         return results
 
@@ -88,6 +90,7 @@ def validate_candidate(candidate: Any) -> None:
 
 
 def to_json_safe(value: Any) -> Any:
+    # NumPy·pandas 값과 NaN/Inf를 JSON 직렬화 가능한 값으로 변환한다.
     if isinstance(value, dict):
         return {
             str(key): to_json_safe(item)
