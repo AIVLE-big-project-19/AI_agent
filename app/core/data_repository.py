@@ -12,6 +12,7 @@ from app.config import Settings
 
 @dataclass(frozen=True)
 class DataBundle:
+    # 추천에 필요한 정책·관계·자금조건의 필수 필드다.
     policy_df: pd.DataFrame
     relation_df: pd.DataFrame
     funding_df: pd.DataFrame
@@ -118,6 +119,7 @@ class DataRepository:
         if not isinstance(payload, dict):
             raise ValueError("통합 정책 JSON 최상위 값은 객체여야 합니다.")
 
+        # 통합 JSON의 데이터 배열을 각각 DataFrame으로 변환한다.
         policies = self._require_list(payload, "policy_programs")
         relations = self._require_list(payload, "support_relations")
         funding = self._require_list(payload, "funding_conditions")
@@ -154,6 +156,7 @@ class DataRepository:
             "funding_condition_id",
         )
 
+        # 모든 정책이 최소 하나의 자금지원 조건과 연결되어 있는지 확인한다.
         policy_ids = set(policy_df["program_id"].astype(str))
         funding_program_ids = set(funding_df["program_id"].astype(str))
         missing_funding = sorted(policy_ids - funding_program_ids)
