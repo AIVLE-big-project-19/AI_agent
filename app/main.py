@@ -23,6 +23,7 @@ settings = get_settings()
 agent_service = AgentService(settings)
 
 
+# 서버 시작 시 정책 데이터와 추천 엔진을 초기화한다.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
@@ -52,6 +53,7 @@ def require_internal_api_key(
         alias="X-Internal-API-Key",
     ),
 ) -> None:
+    # 운영 환경에 내부 API 키가 설정된 경우에만 요청을 검증한다.
     expected = settings.internal_api_key.strip()
     if not expected:
         return
@@ -79,6 +81,7 @@ def get_service(request: Request) -> AgentService:
         None,
     )
 
+    # 초기화에 실패한 상태로 분석 요청이 실행되는 것을 막는다.
     if service is None or startup_error:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
